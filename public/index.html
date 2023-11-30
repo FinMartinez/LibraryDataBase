@@ -6,61 +6,121 @@
 </head>
 <body>
 
-<div id="Itemlist">
-    <ul>
-    <li v-for="item in items">
-        <button v-on:click="deleteItem(item.id)">Done!</button>
-        {{item.when}} {{item.what}}
+<h1>Lists of Books and People</h1>
+
+<div id="BookList">
+    <button v-on:click="toggleBooks">{{ showBooks ? 'Hide Books' : 'Show Books' }}</button>
+    <ul v-if="showBooks">
+    <li v-for="item in items" :key="item.id">
+        {{item.title}}
+        <ul>
+            <li>Author: {{item.person}}</li> 
+            <li>{{item.isbn}}</li>
+        </ul>
     </li>
     </ul>
+</div>
 
-    <form v-on:submit="newItem">
-      <div>
-        <label for="what">What: </label>
-        <input id="what" type="text">
-        <label for="when">When: </label>
-        <input id="when" type="date">
-        <input type="submit" value="New">
-      </div>
-    </form>
+<div id="PeopleList">
+    <button v-on:click="togglePeople">{{ showPeople ? 'Hide People' : 'Show People' }}</button>
+    <ul v-if="showPeople">
+        <li v-for="person in people" :key="person.id">
+            {{person.name}}
+            <ul>
+                <li>Email: {{person.email}}</li> 
+                <li>Telephone: {{person.phone}}</li>
+                <li>Books by Author:</li>
+                <ul v-if="person.books && person.books.length">
+                    <li v-for="book in person.books" :key="book.id">
+                     {{book.title}}
+                    </li>
+                </ul>
+                <p v-else> *No books by author*</p>
+            </ul>
+        </li>
+    </ul>
 </div>
 
 <script type="text/javascript">
 new Vue({
-    el: '#Itemlist',
-    data: { items: [] },
+    el: '#BookList',
+    data: { 
+        items: [], 
+        showBooks: false
+    },
     methods: {
         showItems: function() {
-            fetch('http://localhost:3000/items.json')
-                .then(response => response.json()
-                    .then(json => { this.items = json; }))
-                    .catch(error => { console.log(error); })
+            fetch('http://localhost:3000/books.json')
+                .then(response => response.json())
+                .then(books => {
+                    const getPerson = books.map(book => {
+                        return fetch(`http://localhost:3000/people/${book.person_id}.json`)
+                            .then(response => response.json())
+                            .then(person => {
+                                book.person = person.name;
+                                return book
+                            });
+                    });
+                    return Promise.all(getPerson);
+                })
+                .then(booksWithPersonName => {
+                    this.items = booksWithPersonName;
+                })   
                 .catch(error => { console.log(error); });
         },
-        deleteItem: function(id) {
-            fetch('http://localhost:3000/items/' + id + '.json',
-                {method: 'DELETE'})
-                .then(this.showItems)
+        toggleBooks: function() {
+            this.showBooks = !this.showBooks;
+            if (this.showBooks && this.items.length === 0) {
+                this.showItems();
+            }
+        }
+    }
+});
+
+</script>
+
+<script type="text/javascript">
+new Vue({
+    el: '#PeopleList',
+    data: { 
+        people: [],
+        books: [], 
+        showPeople: false
+    },
+    methods: {
+        getBooksByPerson: function(personId) {
+            return fetch('http://localhost:3000/books.json')
+                .then(response => response.json())
+                .then(books => {
+                    return books.filter(book => book.person_id === personId);
+                })
                 .catch(error => { console.log(error); });
         },
-        newItem: function(e) {
-            e.preventDefault();
-
-            data = {what: e.target.elements.what.value,
-                when: e.target.elements.when.value};
-
-            fetch('http://localhost:3000/items.json', {
-                method: 'POST',
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(data),
-            })
-            .then(this.showItems)
-            .catch(error => { console.log(error); });
+        showPeopleList: function() {
+            fetch('http://localhost:3000/people.json')
+                .then(response => response.json())
+                .then(people => {
+                    const getBooks = people.map(person => {
+                        return this.getBooksByPerson(person.id)
+                            .then(books => {
+                                person.books = books;
+                                return person
+                            });
+                    });
+                    return Promise.all(getBooks);
+                })
+                .then(peopleWithBooks => {
+                    this.people = peopleWithBooks;
+                })   
+                .catch(error => { console.log(error); });
         },
-    },
-    mounted: function() {
-        this.showItems();
-    },
+        togglePeople: function() {
+            this.showPeople = !this.showPeople;
+            if (this.showPeople && this.people.length === 0) {
+                this.showPeopleList();
+            }
+        }
+    }
 });
 
 </script>
